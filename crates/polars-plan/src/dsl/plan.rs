@@ -351,214 +351,9 @@ impl DslPlan {
     /// Get the root source of the plan (the deepest input).
     #[recursive]
     fn get_root_input(&self) -> &DslPlan {
-        match self.inputs() {
-            DslInputs::Empty => self,
-            DslInputs::Single(input) => input.get_root_input(),
-            DslInputs::Double(left, _) => left.get_root_input(),
-            DslInputs::Multiple(inputs) => {
-                if let Some(first) = inputs.first() {
-                    first.get_root_input()
-                } else {
-                    self
-                }
-            }
-            DslInputs::WithContexts { input, .. } => input.get_root_input(),
-        }
-    }
-
-    /// Replace the root source in this plan with a new source.
-    #[recursive]
-    fn replace_root_source(&self, new_source: DslPlan) -> Self {
-        use DslPlan::*;
-
-        match self.inputs() {
-            DslInputs::Empty => {
-                // This is a source node - replace it
-                new_source
-            }
-            DslInputs::Single(input) => {
-                let new_input = Arc::new(input.replace_root_source(new_source));
-                self.clone_with_single_input(new_input)
-            }
-            DslInputs::Double(left, right) => {
-                let new_left = Arc::new(left.replace_root_source(new_source.clone()));
-                let new_right = Arc::new(right.replace_root_source(new_source));
-                self.clone_with_double_input(new_left, new_right)
-            }
-            DslInputs::Multiple(inputs) => {
-                let new_inputs: Vec<_> = inputs
-                    .iter()
-                    .map(|input| input.replace_root_source(new_source.clone()))
-                    .collect();
-                self.clone_with_multiple_inputs(new_inputs)
-            }
-            DslInputs::WithContexts { input, contexts } => {
-                let new_input = Arc::new(input.replace_root_source(new_source.clone()));
-                let new_contexts: Vec<_> = contexts
-                    .iter()
-                    .map(|ctx| ctx.replace_root_source(new_source.clone()))
-                    .collect();
-                self.clone_with_contexts(new_input, new_contexts)
-            }
-        }
-    }
-
-    /// Helper: clone plan with a new single input
-    fn clone_with_single_input(&self, new_input: Arc<DslPlan>) -> Self {
         use DslPlan::*;
         match self {
-            Filter { predicate, .. } => Filter {
-                input: new_input,
-                predicate: predicate.clone(),
-            },
-            Cache { id, .. } => Cache {
-                input: new_input,
-                id: *id,
-            },
-            Select { expr, options, .. } => Select {
-                expr: expr.clone(),
-                input: new_input,
-                options: options.clone(),
-            },
-            GroupBy {
-                keys,
-                aggs,
-                maintain_order,
-                options,
-                apply,
-                ..
-            } => GroupBy {
-                input: new_input,
-                keys: keys.clone(),
-                aggs: aggs.clone(),
-                maintain_order: *maintain_order,
-                options: options.clone(),
-                apply: apply.clone(),
-            },
-            HStack { exprs, options, .. } => HStack {
-                input: new_input,
-                exprs: exprs.clone(),
-                options: options.clone(),
-            },
-            MatchToSchema {
-                match_schema,
-                per_column,
-                extra_columns,
-                ..
-            } => MatchToSchema {
-                input: new_input,
-                match_schema: match_schema.clone(),
-                per_column: per_column.clone(),
-                extra_columns: *extra_columns,
-            },
-            PipeWithSchema { callback, .. } => PipeWithSchema {
-                input: new_input,
-                callback: callback.clone(),
-            },
-            Distinct { options, .. } => Distinct {
-                input: new_input,
-                options: options.clone(),
-            },
-            Sort {
-                by_column,
-                slice,
-                sort_options,
-                ..
-            } => Sort {
-                input: new_input,
-                by_column: by_column.clone(),
-                slice: *slice,
-                sort_options: sort_options.clone(),
-            },
-            Slice { offset, len, .. } => Slice {
-                input: new_input,
-                offset: *offset,
-                len: *len,
-            },
-            MapFunction { function, .. } => MapFunction {
-                input: new_input,
-                function: function.clone(),
-            },
-            Sink { payload, .. } => Sink {
-                input: new_input,
-                payload: payload.clone(),
-            },
-            IR { version, node, .. } => IR {
-                dsl: new_input,
-                version: *version,
-                node: *node,
-            },
-            _ => unreachable!("clone_with_single_input called on non-single-input plan"),
-        }
-    }
-
-    /// Helper: clone plan with new double inputs
-    fn clone_with_double_input(&self, new_left: Arc<DslPlan>, new_right: Arc<DslPlan>) -> Self {
-        use DslPlan::*;
-        match self {
-            Join {
-                left_on,
-                right_on,
-                predicates,
-                options,
-                ..
-            } => Join {
-                input_left: new_left,
-                input_right: new_right,
-                left_on: left_on.clone(),
-                right_on: right_on.clone(),
-                predicates: predicates.clone(),
-                options: options.clone(),
-            },
-            #[cfg(feature = "merge_sorted")]
-            MergeSorted { key, .. } => MergeSorted {
-                input_left: new_left,
-                input_right: new_right,
-                key: key.clone(),
-            },
-            _ => unreachable!("clone_with_double_input called on non-double-input plan"),
-        }
-    }
-
-    /// Helper: clone plan with new multiple inputs
-    fn clone_with_multiple_inputs(&self, new_inputs: Vec<DslPlan>) -> Self {
-        use DslPlan::*;
-        match self {
-            Union { args, .. } => Union {
-                inputs: new_inputs,
-                args: args.clone(),
-            },
-            HConcat { options, .. } => HConcat {
-                inputs: new_inputs,
-                options: options.clone(),
-            },
-            SinkMultiple { .. } => SinkMultiple { inputs: new_inputs },
-            _ => unreachable!("clone_with_multiple_inputs called on non-multiple-input plan"),
-        }
-    }
-
-    /// Helper: clone ExtContext with new input and contexts
-    fn clone_with_contexts(&self, new_input: Arc<DslPlan>, new_contexts: Vec<DslPlan>) -> Self {
-        use DslPlan::*;
-        match self {
-            ExtContext { .. } => ExtContext {
-                input: new_input,
-                contexts: new_contexts,
-            },
-            _ => unreachable!("clone_with_contexts called on non-ExtContext plan"),
-        }
-    }
-
-    /// Apply the transformations from this plan to a new source (DataFrame or scan).
-    /// The new_source should be a DslPlan representing the data source.
-    pub fn apply_to_source(&self, new_source: DslPlan) -> Self {
-        self.replace_root_source(new_source)
-    }
-
-    /// Get references to child input plans
-    fn inputs(&self) -> DslInputs {
-        use DslPlan::*;
-        match self {
+            // Single input nodes - recurse on input
             Filter { input, .. }
             | Cache { input, .. }
             | Select { input, .. }
@@ -570,39 +365,189 @@ impl DslPlan {
             | Sort { input, .. }
             | Slice { input, .. }
             | MapFunction { input, .. }
-            | Sink { input, .. } => DslInputs::Single(input.as_ref()),
+            | ExtContext { input, .. }
+            | Sink { input, .. } => input.get_root_input(),
 
+            // Double input nodes - recurse on left
+            Join { input_left, .. } => input_left.get_root_input(),
+            #[cfg(feature = "merge_sorted")]
+            MergeSorted { input_left, .. } => input_left.get_root_input(),
+
+            // Multiple inputs - recurse on first
+            Union { inputs, .. } | HConcat { inputs, .. } => {
+                inputs.first().map_or(self, |first| first.get_root_input())
+            }
+
+            // IR wrapper - recurse on inner
+            IR { dsl, .. } => dsl.get_root_input(),
+
+            // Source nodes - return self
+            #[cfg(feature = "python")]
+            PythonScan { .. } | Scan { .. } | DataFrameScan { .. } | SinkMultiple { .. } => self,
+            #[cfg(not(feature = "python"))]
+            Scan { .. } | DataFrameScan { .. } | SinkMultiple { .. } => self,
+        }
+    }
+
+    /// Replace the root source in this plan with a new source.
+    #[recursive]
+    fn replace_root_source(&self, new_source: DslPlan) -> Self {
+        use DslPlan::*;
+
+        match self {
+            // Source nodes - replace them
+            #[cfg(feature = "python")]
+            PythonScan { .. } | Scan { .. } | DataFrameScan { .. } => new_source,
+            #[cfg(not(feature = "python"))]
+            Scan { .. } | DataFrameScan { .. } => new_source,
+
+            // Single input nodes
+            Filter { input, predicate } => Filter {
+                input: Arc::new(input.replace_root_source(new_source)),
+                predicate: predicate.clone(),
+            },
+            Cache { input, id } => Cache {
+                input: Arc::new(input.replace_root_source(new_source)),
+                id: *id,
+            },
+            Select { expr, input, options } => Select {
+                expr: expr.clone(),
+                input: Arc::new(input.replace_root_source(new_source)),
+                options: options.clone(),
+            },
+            GroupBy {
+                input,
+                keys,
+                aggs,
+                maintain_order,
+                options,
+                apply,
+            } => GroupBy {
+                input: Arc::new(input.replace_root_source(new_source)),
+                keys: keys.clone(),
+                aggs: aggs.clone(),
+                maintain_order: *maintain_order,
+                options: options.clone(),
+                apply: apply.clone(),
+            },
+            HStack { input, exprs, options } => HStack {
+                input: Arc::new(input.replace_root_source(new_source)),
+                exprs: exprs.clone(),
+                options: options.clone(),
+            },
+            MatchToSchema {
+                input,
+                match_schema,
+                per_column,
+                extra_columns,
+            } => MatchToSchema {
+                input: Arc::new(input.replace_root_source(new_source)),
+                match_schema: match_schema.clone(),
+                per_column: per_column.clone(),
+                extra_columns: *extra_columns,
+            },
+            PipeWithSchema { input, callback } => PipeWithSchema {
+                input: Arc::new(input.replace_root_source(new_source)),
+                callback: callback.clone(),
+            },
+            Distinct { input, options } => Distinct {
+                input: Arc::new(input.replace_root_source(new_source)),
+                options: options.clone(),
+            },
+            Sort {
+                input,
+                by_column,
+                slice,
+                sort_options,
+            } => Sort {
+                input: Arc::new(input.replace_root_source(new_source)),
+                by_column: by_column.clone(),
+                slice: *slice,
+                sort_options: sort_options.clone(),
+            },
+            Slice { input, offset, len } => Slice {
+                input: Arc::new(input.replace_root_source(new_source)),
+                offset: *offset,
+                len: *len,
+            },
+            MapFunction { input, function } => MapFunction {
+                input: Arc::new(input.replace_root_source(new_source)),
+                function: function.clone(),
+            },
+            Sink { input, payload } => Sink {
+                input: Arc::new(input.replace_root_source(new_source)),
+                payload: payload.clone(),
+            },
+            IR { dsl, version, node } => IR {
+                dsl: Arc::new(dsl.replace_root_source(new_source)),
+                version: *version,
+                node: *node,
+            },
+
+            // Double input nodes
             Join {
                 input_left,
                 input_right,
-                ..
-            } => DslInputs::Double(input_left.as_ref(), input_right.as_ref()),
-
+                left_on,
+                right_on,
+                predicates,
+                options,
+            } => Join {
+                input_left: Arc::new(input_left.replace_root_source(new_source.clone())),
+                input_right: Arc::new(input_right.replace_root_source(new_source)),
+                left_on: left_on.clone(),
+                right_on: right_on.clone(),
+                predicates: predicates.clone(),
+                options: options.clone(),
+            },
             #[cfg(feature = "merge_sorted")]
             MergeSorted {
                 input_left,
                 input_right,
-                ..
-            } => DslInputs::Double(input_left.as_ref(), input_right.as_ref()),
-
-            Union { inputs, .. } | HConcat { inputs, .. } | SinkMultiple { inputs } => {
-                DslInputs::Multiple(inputs.as_slice())
-            }
-
-            ExtContext { input, contexts } => DslInputs::WithContexts {
-                input: input.as_ref(),
-                contexts: contexts.as_slice(),
+                key,
+            } => MergeSorted {
+                input_left: Arc::new(input_left.replace_root_source(new_source.clone())),
+                input_right: Arc::new(input_right.replace_root_source(new_source)),
+                key: key.clone(),
             },
 
-            IR { dsl, .. } => DslInputs::Single(dsl.as_ref()),
+            // Multiple input nodes
+            Union { inputs, args } => Union {
+                inputs: inputs
+                    .iter()
+                    .map(|input| input.replace_root_source(new_source.clone()))
+                    .collect(),
+                args: args.clone(),
+            },
+            HConcat { inputs, options } => HConcat {
+                inputs: inputs
+                    .iter()
+                    .map(|input| input.replace_root_source(new_source.clone()))
+                    .collect(),
+                options: options.clone(),
+            },
+            SinkMultiple { inputs } => SinkMultiple {
+                inputs: inputs
+                    .iter()
+                    .map(|input| input.replace_root_source(new_source.clone()))
+                    .collect(),
+            },
 
-            // Source nodes
-            #[cfg(feature = "python")]
-            PythonScan { .. } | Scan { .. } | DataFrameScan { .. } => DslInputs::Empty,
-
-            #[cfg(not(feature = "python"))]
-            Scan { .. } | DataFrameScan { .. } => DslInputs::Empty,
+            // Input with contexts
+            ExtContext { input, contexts } => ExtContext {
+                input: Arc::new(input.replace_root_source(new_source.clone())),
+                contexts: contexts
+                    .iter()
+                    .map(|ctx| ctx.replace_root_source(new_source.clone()))
+                    .collect(),
+            },
         }
+    }
+
+    /// Apply the transformations from this plan to a new source (DataFrame or scan).
+    /// The new_source should be a DslPlan representing the data source.
+    pub fn apply_to_source(&self, new_source: DslPlan) -> Self {
+        self.replace_root_source(new_source)
     }
 
     #[cfg(feature = "dsl-schema")]
@@ -682,17 +627,4 @@ impl std::fmt::Display for SchemaHash<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
-}
-
-/// Helper enum for accessing input plans in a DslPlan
-#[derive(Debug)]
-enum DslInputs<'a> {
-    Empty,
-    Single(&'a DslPlan),
-    Double(&'a DslPlan, &'a DslPlan),
-    Multiple(&'a [DslPlan]),
-    WithContexts {
-        input: &'a DslPlan,
-        contexts: &'a [DslPlan],
-    },
 }
