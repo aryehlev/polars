@@ -565,14 +565,14 @@ class LazyFrame:
         return self._ldf.serialize_template()
 
     @classmethod
-    def from_template(cls, data: LazyFrame, template: bytes) -> LazyFrame:
+    def from_template(cls, data: LazyFrame | DataFrame, template: bytes) -> LazyFrame:
         """
         Create a LazyFrame by applying a template to data.
 
         Parameters
         ----------
         data
-            The LazyFrame to apply the template transformations to.
+            The LazyFrame or DataFrame to apply the template transformations to.
         template
             Serialized template bytes from `to_template()`.
 
@@ -596,10 +596,13 @@ class LazyFrame:
         >>> lf = pl.LazyFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
         >>> result = pl.LazyFrame.from_template(lf, template).collect()
         """
-        # First collect the data to a DataFrame
-        df = data.collect()
-        # Then use the Rust binding to deserialize and bind
+        # Convert to DataFrame if needed
         from polars.dataframe import DataFrame
+        if isinstance(data, LazyFrame):
+            df = data.collect()
+        else:
+            df = data
+        # Then use the Rust binding to deserialize and bind
         return cls._from_pyldf(
             PyLazyFrame.deserialize_template_and_bind(template, df._df)
         )
