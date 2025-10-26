@@ -69,4 +69,48 @@ impl PyLazyFrame {
         })?;
         Ok(LazyFrame::from(lp).into())
     }
+
+    /// Convert LazyFrame to a template (serializable without data).
+    ///
+    /// Replaces all data sources with placeholders, allowing you to serialize
+    /// just the transformation logic and apply it to different datasets later.
+    ///
+    /// Example:
+    ///     >>> template = lf.select([pl.col("x").log1p()]).serialize_template()
+    ///     >>> # Later: deserialize and bind to new data
+    ///     >>> result = template.bind_data(new_df)
+    #[cfg(feature = "ir_serde")]
+    fn serialize_template(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+        py.enter_polars(|| {
+            let template = self.ldf.read().clone().to_template()?;
+            serde_json::to_vec(&template)
+                .map_err(|err| polars_err!(ComputeError: "serialization failed: {}", err))
+        })
+    }
+
+    /// Deserialize a template and bind it to a DataFrame.
+    ///
+    /// Args:
+    ///     data: Serialized template bytes
+    ///     df: DataFrame to bind the template to
+    ///
+    /// Returns:
+    ///     LazyFrame with template applied to the DataFrame
+    #[staticmethod]
+    #[cfg(feature = "ir_serde")]
+    fn deserialize_template_and_bind(
+        py: Python<'_>,
+        data: Vec<u8>,
+        df: &PyDataFrame,
+    ) -> PyResult<Self> {
+        use polars_plan::plans::IRPlan;
+
+        py.enter_polars(|| {
+            let template: IRPlan = serde_json::from_slice(&data)
+                .map_err(|err| polars_err!(ComputeError: "deserialization failed: {}", err))?;
+
+            let bound = template.bind_to_df(std::sync::Arc::new(df.df.clone()))?;
+            Ok(LazyFrame::from(bound).into())
+        })
+    }
 }

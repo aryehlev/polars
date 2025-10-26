@@ -230,6 +230,7 @@ impl IR {
             } => Inputs::Boxed(Box::new(iter::once(*input).chain(contexts.iter().copied()))),
             Scan { .. } => Inputs::Empty,
             DataFrameScan { .. } => Inputs::Empty,
+            PlaceholderScan { .. } => Inputs::Empty,
             #[cfg(feature = "python")]
             PythonScan { .. } => Inputs::Empty,
             #[cfg(feature = "merge_sorted")]
@@ -269,6 +270,7 @@ impl IR {
             } => InputsMut::Boxed(Box::new(iter::once(input).chain(contexts.iter_mut()))),
             Scan { .. } => InputsMut::Empty,
             DataFrameScan { .. } => InputsMut::Empty,
+            PlaceholderScan { .. } => InputsMut::Empty,
             #[cfg(feature = "python")]
             PythonScan { .. } => InputsMut::Empty,
             #[cfg(feature = "merge_sorted")]

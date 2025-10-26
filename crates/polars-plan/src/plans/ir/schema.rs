@@ -85,6 +85,11 @@ impl IR {
                 output_schema,
                 ..
             } => output_schema.as_ref().unwrap_or(schema),
+            PlaceholderScan {
+                schema,
+                output_schema,
+                ..
+            } => output_schema.as_ref().unwrap_or(schema),
             Filter { input, .. } => return arena.get(*input).schema(arena),
             Select { schema, .. } => schema,
             SimpleProjection { columns, .. } => columns,
@@ -153,6 +158,11 @@ impl IR {
                 ..
             } => output_schema.as_ref().unwrap_or(&file_info.schema).clone(),
             DataFrameScan {
+                schema,
+                output_schema,
+                ..
+            } => output_schema.as_ref().unwrap_or(schema).clone(),
+            PlaceholderScan {
                 schema,
                 output_schema,
                 ..
