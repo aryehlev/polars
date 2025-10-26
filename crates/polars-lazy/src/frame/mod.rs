@@ -84,6 +84,29 @@ impl From<DslPlan> for LazyFrame {
     }
 }
 
+impl From<IRPlan> for LazyFrame {
+    fn from(ir_plan: IRPlan) -> Self {
+        // Create a DslPlan::IR wrapper to hold the IR
+        let dsl_plan = DslPlan::IR {
+            node: Some(ir_plan.lp_top),
+            dsl: Arc::new(DslPlan::default()), // placeholder
+            version: ir_plan.lp_arena.version(),
+        };
+
+        let cached = CachedArena {
+            lp_arena: ir_plan.lp_arena,
+            expr_arena: ir_plan.expr_arena,
+            lp_top: Some(ir_plan.lp_top),
+        };
+
+        Self {
+            logical_plan: dsl_plan,
+            opt_state: OptFlags::default(),
+            cached_arena: Arc::new(Mutex::new(Some(cached))),
+        }
+    }
+}
+
 impl LazyFrame {
     pub(crate) fn from_inner(
         logical_plan: DslPlan,
@@ -518,6 +541,31 @@ impl LazyFrame {
         )?;
         let plan = IRPlan::new(node, lp_arena, expr_arena);
         Ok(plan)
+    }
+
+    /// Convert LazyFrame to a template by replacing data sources with placeholders.
+    ///
+    /// This allows serializing the transformation logic without the actual data,
+    /// which can then be applied to different datasets later.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Create a template
+    /// let template = df.lazy()
+    ///     .select([col("x").log1p()])
+    ///     .to_template()?;
+    ///
+    /// // Serialize (with feature "ir_serde")
+    /// let serialized = serde_json::to_vec(&template)?;
+    ///
+    /// // Later: deserialize and bind to new data
+    /// let template: IRPlan = serde_json::from_slice(&serialized)?;
+    /// let result = template.bind_to_df(new_df)?;
+    /// ```
+    pub fn to_template(self) -> PolarsResult<IRPlan> {
+        let ir_plan = self.to_alp()?;
+        Ok(ir_plan.to_template())
     }
 
     pub(crate) fn optimize_with_scratch(
