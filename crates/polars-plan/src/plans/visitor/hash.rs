@@ -260,6 +260,7 @@ impl Hash for HashableEqLP<'_> {
                 key.hash(state);
             },
             IR::Invalid => unreachable!(),
+            IR::PlaceholderScan { .. } => unreachable!(),
         }
     }
 }

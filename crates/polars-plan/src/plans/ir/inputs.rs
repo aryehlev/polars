@@ -119,6 +119,7 @@ impl IR {
             },
 
             Invalid => unreachable!(),
+            PlaceholderScan { .. } => unreachable!(),
         }
     }
 
@@ -192,6 +193,7 @@ impl IR {
             },
 
             Invalid => unreachable!(),
+            PlaceholderScan { .. } => unreachable!(),
         }
     }
 

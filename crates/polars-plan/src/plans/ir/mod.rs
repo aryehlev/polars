@@ -409,7 +409,7 @@ impl IRPlan {
     ///
     /// Convenience method that converts the DataFrame to IR and binds it
     pub fn bind_to_df(&self, df: Arc<DataFrame>) -> PolarsResult<Self> {
-        let schema = df.schema();
+        let schema = df.schema().clone();
         let mut data_arena = Arena::with_capacity(1);
         let data_node = data_arena.add(IR::DataFrameScan {
             df,

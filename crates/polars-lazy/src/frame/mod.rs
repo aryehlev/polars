@@ -93,17 +93,13 @@ impl From<IRPlan> for LazyFrame {
             version: ir_plan.lp_arena.version(),
         };
 
-        let cached = CachedArena {
-            lp_arena: ir_plan.lp_arena,
-            expr_arena: ir_plan.expr_arena,
-            lp_top: Some(ir_plan.lp_top),
-        };
-
-        Self {
+        let lf = Self {
             logical_plan: dsl_plan,
             opt_state: OptFlags::default(),
-            cached_arena: Arc::new(Mutex::new(Some(cached))),
-        }
+            cached_arena: Arc::new(Mutex::new(None)),
+        };
+        lf.set_cached_arena(ir_plan.lp_arena, ir_plan.expr_arena);
+        lf
     }
 }
 

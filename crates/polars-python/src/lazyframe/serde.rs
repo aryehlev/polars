@@ -3,6 +3,7 @@ use std::io::{BufReader, BufWriter, Read};
 use pyo3::prelude::*;
 
 use super::PyLazyFrame;
+use crate::dataframe::PyDataFrame;
 use crate::exceptions::ComputeError;
 use crate::file::get_file_like;
 use crate::prelude::*;
@@ -79,7 +80,6 @@ impl PyLazyFrame {
     ///     >>> template = lf.select([pl.col("x").log1p()]).serialize_template()
     ///     >>> # Later: deserialize and bind to new data
     ///     >>> result = template.bind_data(new_df)
-    #[cfg(feature = "ir_serde")]
     fn serialize_template(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
         py.enter_polars(|| {
             let template = self.ldf.read().clone().to_template()?;
@@ -97,7 +97,6 @@ impl PyLazyFrame {
     /// Returns:
     ///     LazyFrame with template applied to the DataFrame
     #[staticmethod]
-    #[cfg(feature = "ir_serde")]
     fn deserialize_template_and_bind(
         py: Python<'_>,
         data: Vec<u8>,
@@ -105,11 +104,11 @@ impl PyLazyFrame {
     ) -> PyResult<Self> {
         use polars_plan::plans::IRPlan;
 
-        py.enter_polars(|| {
+        py.enter_polars(|| -> PolarsResult<Self> {
             let template: IRPlan = serde_json::from_slice(&data)
                 .map_err(|err| polars_err!(ComputeError: "deserialization failed: {}", err))?;
 
-            let bound = template.bind_to_df(std::sync::Arc::new(df.df.clone()))?;
+            let bound = template.bind_to_df(std::sync::Arc::new(df.df.read().clone()))?;
             Ok(LazyFrame::from(bound).into())
         })
     }

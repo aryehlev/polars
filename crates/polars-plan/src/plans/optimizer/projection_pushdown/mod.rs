@@ -775,6 +775,7 @@ impl ProjectionPushDown {
                 })
             },
             Invalid => unreachable!(),
+            PlaceholderScan { .. } => unreachable!(),
         }
     }
 

@@ -1690,3 +1690,50 @@ def test_cache_hit_child_removal() -> None:
     assert_frame_equal(df1.tail(3), df, check_row_order=False)
     assert_frame_equal(df2.head(3), df, check_row_order=False)
     assert_frame_equal(df2.tail(3), df, check_row_order=False)
+
+
+def test_to_template_from_template() -> None:
+    # Create a template with operations but no source data
+    template = (
+        pl.LazyFrame()
+        .filter(pl.col("a") > 1)
+        .select(pl.col("b") * 2)
+        .to_template()
+    )
+
+    # Apply template to first data source
+    lf1 = pl.LazyFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    result1 = pl.LazyFrame.from_template(lf1, template).collect()
+    expected1 = pl.DataFrame({"b": [10, 12]})
+    assert_frame_equal(result1, expected1)
+
+    # Apply same template to different data source
+    lf2 = pl.LazyFrame({"a": [10, 20, 30], "b": [40, 50, 60]})
+    result2 = pl.LazyFrame.from_template(lf2, template).collect()
+    expected2 = pl.DataFrame({"b": [80, 100, 120]})
+    assert_frame_equal(result2, expected2)
+
+    # Test with DataFrame source
+    df3 = pl.DataFrame({"a": [5, 6, 7], "b": [8, 9, 10]})
+    result3 = pl.LazyFrame.from_template(df3, template).collect()
+    expected3 = pl.DataFrame({"b": [16, 18, 20]})
+    assert_frame_equal(result3, expected3)
+
+    # Test with aggregations
+    agg_template = (
+        pl.LazyFrame()
+        .group_by("category")
+        .agg(pl.sum("amount"))
+        .to_template()
+    )
+
+    df_agg = pl.DataFrame({
+        "category": ["A", "B", "A", "B"],
+        "amount": [100, 200, 300, 400],
+    })
+    result_agg = pl.LazyFrame.from_template(df_agg, agg_template).collect()
+    expected_agg = pl.DataFrame({
+        "category": ["A", "B"],
+        "amount": [400, 600],
+    })
+    assert_frame_equal(result_agg, expected_agg, check_row_order=False)

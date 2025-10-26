@@ -46,6 +46,7 @@ impl IR {
             #[cfg(feature = "merge_sorted")]
             MergeSorted { .. } => "merge_sorted",
             Invalid => "invalid",
+            PlaceholderScan { .. } => "placeholder",
         }
     }
 
