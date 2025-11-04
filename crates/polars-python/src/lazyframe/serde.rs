@@ -71,15 +71,6 @@ impl PyLazyFrame {
         Ok(LazyFrame::from(lp).into())
     }
 
-    /// Convert LazyFrame to a template (serializable without data).
-    ///
-    /// Replaces all data sources with placeholders, allowing you to serialize
-    /// just the transformation logic and apply it to different datasets later.
-    ///
-    /// Example:
-    ///     >>> template = lf.select([pl.col("x").log1p()]).serialize_template()
-    ///     >>> # Later: deserialize and bind to new data
-    ///     >>> result = template.bind_data(new_df)
     fn serialize_template(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
         py.enter_polars(|| {
             let template = self.ldf.read().clone().to_template()?;
@@ -88,14 +79,6 @@ impl PyLazyFrame {
         })
     }
 
-    /// Deserialize a template and bind it to a DataFrame.
-    ///
-    /// Args:
-    ///     data: Serialized template bytes
-    ///     df: DataFrame to bind the template to
-    ///
-    /// Returns:
-    ///     LazyFrame with template applied to the DataFrame
     #[staticmethod]
     fn deserialize_template_and_bind(
         py: Python<'_>,

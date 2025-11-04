@@ -210,7 +210,6 @@ impl IRPlan {
         self.as_ref().display_dot()
     }
 
-    /// Convert to a template by replacing DataFrameScan nodes with PlaceholderScan
     pub fn to_template(&self) -> Self {
         let mut new_arena = Arena::with_capacity(self.lp_arena.len());
         let new_top = Self::convert_to_placeholder(self.lp_top, &self.lp_arena, &mut new_arena);
@@ -226,13 +225,11 @@ impl IRPlan {
         let ir = old_arena.get(node);
         let new_ir = match ir {
             IR::DataFrameScan { schema, output_schema, .. } => {
-                // Replace with placeholder (no data)
                 IR::PlaceholderScan {
                     schema: schema.clone(),
                     output_schema: output_schema.clone(),
                 }
             }
-            // For nodes with inputs, recursively process
             IR::Select { input, expr, schema, options } => {
                 let new_input = Self::convert_to_placeholder(*input, old_arena, new_arena);
                 IR::Select {
@@ -386,15 +383,11 @@ impl IRPlan {
                     key: key.clone(),
                 }
             }
-            // For nodes without inputs or already placeholders, clone as-is
             _ => ir.clone(),
         };
         new_arena.add(new_ir)
     }
 
-    /// Bind a template IR plan to actual data
-    ///
-    /// Replaces all PlaceholderScan nodes with the provided data scan node
     pub fn bind_data(&self, data_node: Node, data_arena: &Arena<IR>) -> PolarsResult<Self> {
         let mut new_arena = Arena::with_capacity(self.lp_arena.len());
         let new_top = Self::replace_placeholder(self.lp_top, data_node, data_arena, &self.lp_arena, &mut new_arena)?;
@@ -405,9 +398,6 @@ impl IRPlan {
         })
     }
 
-    /// Bind a template IR plan to a DataFrame
-    ///
-    /// Convenience method that converts the DataFrame to IR and binds it
     pub fn bind_to_df(&self, df: Arc<DataFrame>) -> PolarsResult<Self> {
         let schema = df.schema().clone();
         let mut data_arena = Arena::with_capacity(1);
@@ -430,16 +420,12 @@ impl IRPlan {
         let ir = template_arena.get(node);
         let new_ir = match ir {
             IR::PlaceholderScan { schema, .. } => {
-                // Validate data schema matches placeholder schema
                 let data_ir = data_arena.get(data_node);
                 let data_schema = match data_ir {
                     IR::DataFrameScan { schema: data_schema, .. } => data_schema,
                     _ => polars_bail!(ComputeError: "bind_data requires data to be a DataFrameScan"),
                 };
 
-                // Schema validation
-                // If the placeholder schema is empty (0 columns), accept any data schema
-                // This allows templates created from pl.LazyFrame() to work with any data
                 if schema.len() > 0 && schema.len() != data_schema.len() {
                     polars_bail!(SchemaMismatch:
                         "Schema mismatch: template expects {} columns, data has {}",
@@ -448,10 +434,8 @@ impl IRPlan {
                     );
                 }
 
-                // Clone the data IR node
                 return Ok(new_arena.add(data_ir.clone()));
             }
-            // Recursively replace in nodes with inputs
             IR::Select { input, expr, schema, options } => {
                 let new_input = Self::replace_placeholder(*input, data_node, data_arena, template_arena, new_arena)?;
                 IR::Select {
