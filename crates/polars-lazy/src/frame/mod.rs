@@ -84,6 +84,25 @@ impl From<DslPlan> for LazyFrame {
     }
 }
 
+impl From<IRPlan> for LazyFrame {
+    fn from(ir_plan: IRPlan) -> Self {
+        // Create a DslPlan::IR wrapper to hold the IR
+        let dsl_plan = DslPlan::IR {
+            node: Some(ir_plan.lp_top),
+            dsl: Arc::new(DslPlan::default()), // placeholder
+            version: ir_plan.lp_arena.version(),
+        };
+
+        let lf = Self {
+            logical_plan: dsl_plan,
+            opt_state: OptFlags::default(),
+            cached_arena: Arc::new(Mutex::new(None)),
+        };
+        lf.set_cached_arena(ir_plan.lp_arena, ir_plan.expr_arena);
+        lf
+    }
+}
+
 impl LazyFrame {
     pub(crate) fn from_inner(
         logical_plan: DslPlan,
@@ -518,6 +537,16 @@ impl LazyFrame {
         )?;
         let plan = IRPlan::new(node, lp_arena, expr_arena);
         Ok(plan)
+    }
+
+   
+    pub fn to_template(mut self) -> PolarsResult<IRPlan> {
+        // Disable type checking and other validations for template creation
+        // This allows templates to be created from empty LazyFrames with unresolved columns
+        self.opt_state.remove(OptFlags::TYPE_CHECK);
+
+        let ir_plan = self.to_alp()?;
+        Ok(ir_plan.to_template())
     }
 
     pub(crate) fn optimize_with_scratch(

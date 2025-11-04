@@ -535,6 +535,78 @@ class LazyFrame:
 
         return cls._from_pyldf(deserializer(source))
 
+    def to_template(self) -> bytes:
+        """
+        Convert this LazyFrame to a reusable template.
+
+        Replaces all data sources with placeholders, allowing you to serialize
+        just the transformation logic and apply it to different datasets later.
+
+        Returns
+        -------
+        bytes
+            Serialized template that can be applied to different data sources.
+
+        See Also
+        --------
+        from_template : Apply a template to data
+
+        Examples
+        --------
+        >>> template = (
+        ...     pl.LazyFrame()
+        ...     .filter(pl.col("a") > 1)
+        ...     .select(pl.col("b") * 2)
+        ...     .to_template()
+        ... )
+        >>> lf = pl.LazyFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        >>> result = pl.LazyFrame.from_template(lf, template)
+        """
+        return self._ldf.serialize_template()
+
+    @classmethod
+    def from_template(cls, data: LazyFrame | DataFrame, template: bytes) -> LazyFrame:
+        """
+        Create a LazyFrame by applying a template to data.
+
+        Parameters
+        ----------
+        data
+            The LazyFrame or DataFrame to apply the template transformations to.
+        template
+            Serialized template bytes from `to_template()`.
+
+        Returns
+        -------
+        LazyFrame
+            A new LazyFrame with the template transformations applied to the data.
+
+        See Also
+        --------
+        to_template : Create a reusable template
+
+        Examples
+        --------
+        >>> template = (
+        ...     pl.LazyFrame()
+        ...     .filter(pl.col("a") > 1)
+        ...     .select(pl.col("b") * 2)
+        ...     .to_template()
+        ... )
+        >>> lf = pl.LazyFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        >>> result = pl.LazyFrame.from_template(lf, template).collect()
+        """
+        # Convert to DataFrame if needed
+        from polars.dataframe import DataFrame
+        if isinstance(data, LazyFrame):
+            df = data.collect()
+        else:
+            df = data
+        # Then use the Rust binding to deserialize and bind
+        return cls._from_pyldf(
+            PyLazyFrame.deserialize_template_and_bind(template, df._df)
+        )
+
     @property
     def columns(self) -> list[str]:
         """
