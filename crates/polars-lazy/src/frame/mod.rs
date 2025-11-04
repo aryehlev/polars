@@ -539,26 +539,7 @@ impl LazyFrame {
         Ok(plan)
     }
 
-    /// Convert LazyFrame to a template by replacing data sources with placeholders.
-    ///
-    /// This allows serializing the transformation logic without the actual data,
-    /// which can then be applied to different datasets later.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// // Create a template
-    /// let template = df.lazy()
-    ///     .select([col("x").log1p()])
-    ///     .to_template()?;
-    ///
-    /// // Serialize (with feature "ir_serde")
-    /// let serialized = serde_json::to_vec(&template)?;
-    ///
-    /// // Later: deserialize and bind to new data
-    /// let template: IRPlan = serde_json::from_slice(&serialized)?;
-    /// let result = template.bind_to_df(new_df)?;
-    /// ```
+   
     pub fn to_template(mut self) -> PolarsResult<IRPlan> {
         // Disable type checking and other validations for template creation
         // This allows templates to be created from empty LazyFrames with unresolved columns
