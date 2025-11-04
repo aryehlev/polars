@@ -134,6 +134,26 @@ def test_count() -> None:
     }
 
 
+def test_cte_aliasing() -> None:
+    df1 = pl.DataFrame({"colx": ["aa", "bb"], "coly": [40, 30]})  # noqa: F841
+    df2 = pl.DataFrame({"colx": "aa", "colz": 20})  # noqa: F841
+    df3 = pl.sql(
+        query="""
+            WITH
+              test1 AS (SELECT * FROM df1),
+              test2 AS (SELECT * FROM df2),
+              test3 AS (
+                SELECT t1.colx, t2.colz
+                FROM test1 t1
+                LEFT JOIN test2 t2 ON t1.colx = t2.colx
+            )
+            SELECT * FROM test3 t3 ORDER BY colx DESC
+        """,
+        eager=True,
+    )
+    assert df3.rows() == [("bb", None), ("aa", 20)]
+
+
 def test_distinct() -> None:
     df = pl.DataFrame(
         {
@@ -184,6 +204,16 @@ def test_frame_sql_globals_error() -> None:
     assert res.to_dict(as_series=False) == {"a": [2, 3], "b": [7, 6]}
 
 
+def test_global_misc_lookup() -> None:
+    # check that `col` in global namespace is not incorrectly identified
+    # as supporting pycapsule (as it can look like it has *any* attr)
+    from polars import col  # noqa: F401
+
+    df = pl.DataFrame({"col": [90, 80, 70]})  # noqa: F841
+    df_res = pl.sql("SELECT col FROM df WHERE col > 75", eager=True)
+    assert df_res.rows() == [(90,), (80,)]
+
+
 def test_in_no_ops_11946() -> None:
     lf = pl.LazyFrame(
         [
@@ -215,6 +245,29 @@ def test_limit_offset() -> None:
         )
         assert_frame_equal(out, lf.slice(offset, limit).collect())
         assert len(out) == min(limit, n_values - offset)
+
+
+def test_nested_subquery_table_leakage() -> None:
+    a = pl.LazyFrame({"id": [1, 2, 3]})
+    b = pl.LazyFrame({"val": [2, 3, 4]})
+
+    ctx = pl.SQLContext(a=a, b=b)
+    ctx.execute("""
+      SELECT *
+      FROM a
+      WHERE id IN (
+          SELECT derived.val
+          FROM (SELECT val FROM b) AS derived
+      )
+    """)
+
+    # after execution of the above query, confirm that we don't see the
+    # inner "derived" table alias still being registered in the context
+    with pytest.raises(
+        SQLInterfaceError,
+        match="relation 'derived' was not found",
+    ):
+        ctx.execute("SELECT * FROM derived")
 
 
 def test_register_context() -> None:

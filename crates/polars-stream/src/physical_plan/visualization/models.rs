@@ -93,6 +93,14 @@ pub enum PhysNodeProperties {
         keys: Vec<PlSmallStr>,
         aggs: Vec<PlSmallStr>,
     },
+    #[cfg(feature = "dynamic_group_by")]
+    RollingGroupBy {
+        index_column: PlSmallStr,
+        period: PlSmallStr,
+        offset: PlSmallStr,
+        closed_window: PlSmallStr,
+        aggs: Vec<PlSmallStr>,
+    },
     InMemoryMap {
         format_str: PlSmallStr,
     },
@@ -248,7 +256,8 @@ pub enum PhysNodeProperties {
         kind: PlSmallStr,
     },
     #[cfg(feature = "ewma")]
-    EwmMean {
+    Ewm {
+        variant: PlSmallStr,
         alpha: f64,
         adjust: bool,
         bias: bool,

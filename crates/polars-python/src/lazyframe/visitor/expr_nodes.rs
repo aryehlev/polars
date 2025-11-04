@@ -684,10 +684,13 @@ pub(crate) fn into_py(py: Python<'_>, expr: &AExpr) -> PyResult<Py<PyAny>> {
                 arguments: vec![n.0],
                 options: py.None(),
             },
-            IRAggExpr::Item(n) => Agg {
+            IRAggExpr::Item {
+                input: n,
+                allow_empty,
+            } => Agg {
                 name: "item".into_py_any(py)?,
                 arguments: vec![n.0],
-                options: py.None(),
+                options: allow_empty.into_py_any(py)?,
             },
             IRAggExpr::Mean(n) => Agg {
                 name: "mean".into_py_any(py)?,
@@ -749,6 +752,9 @@ pub(crate) fn into_py(py: Python<'_>, expr: &AExpr) -> PyResult<Py<PyAny>> {
         }
         .into_py_any(py),
         AExpr::AnonymousFunction { .. } => Err(PyNotImplementedError::new_err("anonymousfunction")),
+        AExpr::AnonymousStreamingAgg { .. } => {
+            Err(PyNotImplementedError::new_err("anonymous_streaming_agg"))
+        },
         AExpr::Function {
             input,
             function,
