@@ -186,6 +186,31 @@ impl PhysicalPlanVisualizationDataGenerator<'_> {
                     ..Default::default()
                 }
             },
+            #[cfg(feature = "dynamic_group_by")]
+            PhysNodeKind::RollingGroupBy {
+                input,
+                index_column,
+                period,
+                offset,
+                closed,
+                aggs,
+            } => {
+                phys_node_inputs.push(input.node);
+
+                let properties = PhysNodeProperties::RollingGroupBy {
+                    index_column: index_column.clone(),
+                    period: format_pl_smallstr!("{period}"),
+                    offset: format_pl_smallstr!("{offset}"),
+                    closed_window: PlSmallStr::from_static(closed.into()),
+                    aggs: expr_list(aggs, self.expr_arena),
+                };
+
+                PhysNodeInfo {
+                    title: properties.variant_name(),
+                    properties,
+                    ..Default::default()
+                }
+            },
             PhysNodeKind::InMemoryMap {
                 input,
                 map: _, // dyn DataFrameUdf
@@ -865,20 +890,21 @@ impl PhysicalPlanVisualizationDataGenerator<'_> {
                 }
             },
             #[cfg(feature = "ewma")]
-            PhysNodeKind::EwmMean {
-                input,
-                options:
-                    polars_ops::series::EWMOptions {
-                        alpha,
-                        adjust,
-                        bias,
-                        min_periods,
-                        ignore_nulls,
-                    },
-            } => {
+            PhysNodeKind::EwmMean { input, options }
+            | PhysNodeKind::EwmVar { input, options }
+            | PhysNodeKind::EwmStd { input, options } => {
                 phys_node_inputs.push(input.node);
 
-                let properties = PhysNodeProperties::EwmMean {
+                let polars_ops::series::EWMOptions {
+                    alpha,
+                    adjust,
+                    bias,
+                    min_periods,
+                    ignore_nulls,
+                } = options;
+
+                let properties = PhysNodeProperties::Ewm {
+                    variant: PlSmallStr::from_static(phys_node.kind().into()),
                     alpha: *alpha,
                     adjust: *adjust,
                     bias: *bias,

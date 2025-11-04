@@ -140,7 +140,7 @@ impl AExpr {
                     | Min { input: expr, .. }
                     | First(expr)
                     | Last(expr)
-                    | Item(expr) => ctx.arena.get(*expr).to_field_impl(ctx),
+                    | Item { input: expr, .. } => ctx.arena.get(*expr).to_field_impl(ctx),
                     Sum(expr) => {
                         let mut field = ctx.arena.get(*expr).to_field_impl(ctx)?;
                         let dt = match field.dtype() {
@@ -247,6 +247,18 @@ impl AExpr {
                 let out = function.get_field(ctx.schema, &fields)?;
                 Ok(out)
             },
+            AnonymousStreamingAgg {
+                input,
+                function,
+                fmt_str,
+                ..
+            } => {
+                let fields = func_args_to_fields(input, ctx)?;
+                polars_ensure!(!fields.is_empty(), ComputeError: "expression: '{}' didn't get any inputs", fmt_str);
+                let function = function.clone().materialize()?;
+                let out = function.get_field(ctx.schema, &fields)?;
+                Ok(out)
+            },
             Eval {
                 expr,
                 evaluation,
@@ -320,7 +332,7 @@ impl AExpr {
             | Agg(Min { input: expr, .. })
             | Agg(First(expr))
             | Agg(Last(expr))
-            | Agg(Item(expr))
+            | Agg(Item { input: expr, .. })
             | Agg(Sum(expr))
             | Agg(Median(expr))
             | Agg(Mean(expr))
@@ -331,7 +343,8 @@ impl AExpr {
             | Agg(Count { input: expr, .. })
             | Agg(AggGroups(expr))
             | Agg(Quantile { expr, .. }) => expr_arena.get(*expr).to_name(expr_arena),
-            AnonymousFunction { input, fmt_str, .. } => {
+            AnonymousFunction { input, fmt_str, .. }
+            | AnonymousStreamingAgg { input, fmt_str, .. } => {
                 if input.is_empty() {
                     fmt_str.as_ref().clone()
                 } else {
