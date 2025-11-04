@@ -559,7 +559,11 @@ impl LazyFrame {
     /// let template: IRPlan = serde_json::from_slice(&serialized)?;
     /// let result = template.bind_to_df(new_df)?;
     /// ```
-    pub fn to_template(self) -> PolarsResult<IRPlan> {
+    pub fn to_template(mut self) -> PolarsResult<IRPlan> {
+        // Disable type checking and other validations for template creation
+        // This allows templates to be created from empty LazyFrames with unresolved columns
+        self.opt_state.remove(OptFlags::TYPE_CHECK);
+
         let ir_plan = self.to_alp()?;
         Ok(ir_plan.to_template())
     }

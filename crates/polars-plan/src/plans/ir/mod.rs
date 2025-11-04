@@ -438,7 +438,9 @@ impl IRPlan {
                 };
 
                 // Schema validation
-                if schema.len() != data_schema.len() {
+                // If the placeholder schema is empty (0 columns), accept any data schema
+                // This allows templates created from pl.LazyFrame() to work with any data
+                if schema.len() > 0 && schema.len() != data_schema.len() {
                     polars_bail!(SchemaMismatch:
                         "Schema mismatch: template expects {} columns, data has {}",
                         schema.len(),
