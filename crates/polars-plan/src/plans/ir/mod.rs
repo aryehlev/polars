@@ -230,6 +230,19 @@ impl IRPlan {
                     output_schema: output_schema.clone(),
                 }
             }
+            IR::Scan { file_info, output_schema, .. } => {
+                IR::PlaceholderScan {
+                    schema: file_info.schema.clone(),
+                    output_schema: output_schema.clone(),
+                }
+            }
+            #[cfg(feature = "python")]
+            IR::PythonScan { options } => {
+                IR::PlaceholderScan {
+                    schema: options.schema.clone(),
+                    output_schema: options.output_schema.clone(),
+                }
+            }
             IR::Select { input, expr, schema, options } => {
                 let new_input = Self::convert_to_placeholder(*input, old_arena, new_arena);
                 IR::Select {
