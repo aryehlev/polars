@@ -212,6 +212,38 @@ impl IRPlan {
         self.as_ref().display_dot()
     }
 
+    /// Convert an IR plan to a template by replacing all data sources with PlaceholderScan nodes.
+    ///
+    /// This traverses the IR tree and replaces:
+    /// - `IR::DataFrameScan` → `IR::PlaceholderScan`
+    /// - `IR::Scan` (CSV, Parquet, etc.) → `IR::PlaceholderScan`
+    /// - `IR::PythonScan` → `IR::PlaceholderScan`
+    ///
+    /// All other IR nodes (Filter, Select, Join, etc.) are preserved as-is.
+    ///
+    /// # Important: Only Use with Unoptimized Plans
+    ///
+    /// This method should only be called on **unoptimized** IR plans where:
+    /// - Predicates remain as separate `IR::Filter` nodes
+    /// - Projections remain as separate `IR::Select` nodes
+    /// - No optimizations have pushed these into Scan nodes
+    ///
+    /// **Why:** `PlaceholderScan` only preserves `schema` and `output_schema`. If a Scan
+    /// node contains pushed-down predicates or projections, those will be silently lost.
+    ///
+    /// The safe usage pattern is:
+    /// ```ignore
+    /// // DSL → IR (no optimization) → template
+    /// let ir_plan = lf.to_alp()?;  // No optimization
+    /// let template = ir_plan.to_template();  // Safe
+    /// ```
+    ///
+    /// **Unsafe pattern** (would lose predicates):
+    /// ```ignore
+    /// // DSL → optimized IR → template
+    /// let ir_plan = lf.to_alp_optimized()?;  // Predicates pushed into Scans
+    /// let template = ir_plan.to_template();  // Predicates would be lost!
+    /// ```
     pub fn to_template(&self) -> Self {
         let mut new_arena = Arena::with_capacity(self.lp_arena.len());
         let mut placeholder_id = 0;
