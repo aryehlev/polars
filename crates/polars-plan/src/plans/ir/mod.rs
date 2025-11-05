@@ -408,7 +408,9 @@ impl IRPlan {
                     key: key.clone(),
                 }
             }
-            _ => ir.clone(),
+            // Nodes without inputs - just clone them
+            IR::PlaceholderScan { .. } => ir.clone(),
+            IR::Invalid => ir.clone(),
         };
         new_arena.add(new_ir)
     }
@@ -455,24 +457,6 @@ impl IRPlan {
         }
 
         self.bind_data(data_map, &data_arena)
-    }
-
-    fn count_placeholders(&self) -> usize {
-        let mut max_id = 0;
-        let mut found_any = false;
-
-        for (_node, ir) in self.lp_arena.iter(self.lp_top) {
-            if let IR::PlaceholderScan { id, .. } = ir {
-                found_any = true;
-                max_id = (*id).max(max_id);
-            }
-        }
-
-        if found_any {
-            max_id + 1
-        } else {
-            0
-        }
     }
 
     #[recursive::recursive]
@@ -676,8 +660,14 @@ impl IRPlan {
                     key: key.clone(),
                 }
             }
-            // For nodes without inputs, just clone
-            _ => ir.clone(),
+            // Nodes without inputs - clone as-is
+            // Note: DataFrameScan/Scan/PythonScan shouldn't appear in templates (they're replaced by PlaceholderScan),
+            // but we handle them explicitly for exhaustiveness checking
+            IR::DataFrameScan { .. } => ir.clone(),
+            IR::Scan { .. } => ir.clone(),
+            #[cfg(feature = "python")]
+            IR::PythonScan { .. } => ir.clone(),
+            IR::Invalid => ir.clone(),
         };
         Ok(new_arena.add(new_ir))
     }
