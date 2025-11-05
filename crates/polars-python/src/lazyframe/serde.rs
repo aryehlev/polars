@@ -95,4 +95,26 @@ impl PyLazyFrame {
             Ok(LazyFrame::from(bound).into())
         })
     }
+
+    #[staticmethod]
+    fn deserialize_template_and_bind_multi(
+        py: Python<'_>,
+        data: Vec<u8>,
+        dfs: Vec<PyDataFrame>,
+    ) -> PyResult<Self> {
+        use polars_plan::plans::IRPlan;
+
+        py.enter_polars(|| -> PolarsResult<Self> {
+            let template: IRPlan = serde_json::from_slice(&data)
+                .map_err(|err| polars_err!(ComputeError: "deserialization failed: {}", err))?;
+
+            let dataframes: Vec<std::sync::Arc<DataFrame>> = dfs
+                .iter()
+                .map(|df| std::sync::Arc::new(df.df.read().clone()))
+                .collect();
+
+            let bound = template.bind_to_dfs(dataframes)?;
+            Ok(LazyFrame::from(bound).into())
+        })
+    }
 }

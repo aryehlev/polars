@@ -565,7 +565,11 @@ class LazyFrame:
         return self._ldf.serialize_template()
 
     @classmethod
-    def from_template(cls, data: LazyFrame | DataFrame, template: bytes) -> LazyFrame:
+    def from_template(
+        cls,
+        data: LazyFrame | DataFrame | list[LazyFrame | DataFrame] | tuple[LazyFrame | DataFrame, ...],
+        template: bytes,
+    ) -> LazyFrame:
         """
         Create a LazyFrame by applying a template to data.
 
@@ -573,6 +577,8 @@ class LazyFrame:
         ----------
         data
             The LazyFrame or DataFrame to apply the template transformations to.
+            For templates with multiple data sources (e.g., joins), provide a list or tuple
+            of DataFrames/LazyFrames corresponding to each placeholder in the template.
         template
             Serialized template bytes from `to_template()`.
 
@@ -587,6 +593,8 @@ class LazyFrame:
 
         Examples
         --------
+        Single data source:
+
         >>> template = (
         ...     pl.LazyFrame()
         ...     .filter(pl.col("a") > 1)
@@ -595,14 +603,38 @@ class LazyFrame:
         ... )
         >>> lf = pl.LazyFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
         >>> result = pl.LazyFrame.from_template(lf, template).collect()
+
+        Multiple data sources (for joins, unions, etc.):
+
+        >>> left = pl.LazyFrame({"a": [1, 2, 3]})
+        >>> right = pl.LazyFrame({"b": [4, 5, 6]})
+        >>> template = left.join(right, left_on="a", right_on="b").to_template()
+        >>> new_left = pl.DataFrame({"a": [7, 8, 9]})
+        >>> new_right = pl.DataFrame({"b": [10, 11, 12]})
+        >>> result = pl.LazyFrame.from_template([new_left, new_right], template).collect()
         """
-        # Convert to DataFrame if needed
         from polars.dataframe import DataFrame
+
+        # Handle list/tuple of data sources
+        if isinstance(data, (list, tuple)):
+            dfs = []
+            for item in data:
+                if isinstance(item, LazyFrame):
+                    dfs.append(item.collect())
+                else:
+                    dfs.append(item)
+            # Convert to PyDataFrame objects
+            py_dfs = [df._df for df in dfs]
+            return cls._from_pyldf(
+                PyLazyFrame.deserialize_template_and_bind_multi(template, py_dfs)
+            )
+
+        # Handle single data source
         if isinstance(data, LazyFrame):
             df = data.collect()
         else:
             df = data
-        # Then use the Rust binding to deserialize and bind
+
         return cls._from_pyldf(
             PyLazyFrame.deserialize_template_and_bind(template, df._df)
         )

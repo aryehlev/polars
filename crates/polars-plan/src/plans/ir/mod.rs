@@ -436,6 +436,45 @@ impl IRPlan {
         self.bind_data(data_map, &data_arena)
     }
 
+    pub fn bind_to_dfs(&self, dfs: Vec<Arc<DataFrame>>) -> PolarsResult<Self> {
+        if dfs.is_empty() {
+            polars_bail!(ComputeError: "bind_to_dfs requires at least one DataFrame");
+        }
+
+        let mut data_arena = Arena::with_capacity(dfs.len());
+        let mut data_map = HashMap::new();
+
+        for (id, df) in dfs.iter().enumerate() {
+            let schema = df.schema().clone();
+            let data_node = data_arena.add(IR::DataFrameScan {
+                df: df.clone(),
+                schema,
+                output_schema: None,
+            });
+            data_map.insert(id, data_node);
+        }
+
+        self.bind_data(data_map, &data_arena)
+    }
+
+    fn count_placeholders(&self) -> usize {
+        let mut max_id = 0;
+        let mut found_any = false;
+
+        for (_node, ir) in self.lp_arena.iter(self.lp_top) {
+            if let IR::PlaceholderScan { id, .. } = ir {
+                found_any = true;
+                max_id = (*id).max(max_id);
+            }
+        }
+
+        if found_any {
+            max_id + 1
+        } else {
+            0
+        }
+    }
+
     #[recursive::recursive]
     fn replace_placeholder(
         node: Node,
