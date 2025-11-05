@@ -426,6 +426,15 @@ impl IRPlan {
     }
 
     pub fn bind_to_df(&self, df: Arc<DataFrame>) -> PolarsResult<Self> {
+        // Validate that the template has exactly one placeholder
+        let placeholder_count = self.count_placeholders();
+        if placeholder_count != 1 {
+            polars_bail!(ComputeError:
+                "bind_to_df expects a template with exactly 1 placeholder, but found {}",
+                placeholder_count
+            );
+        }
+
         let schema = df.schema().clone();
         let mut data_arena = Arena::with_capacity(1);
         let data_node = data_arena.add(IR::DataFrameScan {
@@ -443,6 +452,18 @@ impl IRPlan {
             polars_bail!(ComputeError: "bind_to_dfs requires at least one DataFrame");
         }
 
+        // Validate that the number of DataFrames matches the number of placeholders
+        let placeholder_count = self.count_placeholders();
+        if dfs.len() != placeholder_count {
+            polars_bail!(ComputeError:
+                "DataFrame count mismatch: template has {} placeholder{}, but {} DataFrame{} provided",
+                placeholder_count,
+                if placeholder_count == 1 { "" } else { "s" },
+                dfs.len(),
+                if dfs.len() == 1 { "" } else { "s" }
+            );
+        }
+
         let mut data_arena = Arena::with_capacity(dfs.len());
         let mut data_map = HashMap::new();
 
@@ -457,6 +478,26 @@ impl IRPlan {
         }
 
         self.bind_data(data_map, &data_arena)
+    }
+
+    /// Count the number of PlaceholderScan nodes in the IR plan
+    fn count_placeholders(&self) -> usize {
+        self.count_placeholders_recursive(self.lp_top, &self.lp_arena)
+    }
+
+    /// Recursively count PlaceholderScan nodes in the IR tree
+    fn count_placeholders_recursive(&self, node: Node, arena: &Arena<IR>) -> usize {
+        let ir = arena.get(node);
+        match ir {
+            IR::PlaceholderScan { .. } => 1,
+            _ => {
+                // Sum placeholder counts from all input nodes
+                ir.inputs()
+                    .into_iter()
+                    .map(|input| self.count_placeholders_recursive(input, arena))
+                    .sum()
+            }
+        }
     }
 
     #[recursive::recursive]
