@@ -439,12 +439,29 @@ impl IRPlan {
                     _ => polars_bail!(ComputeError: "bind_data requires data to be a DataFrameScan"),
                 };
 
-                if schema.len() > 0 && schema.len() != data_schema.len() {
-                    polars_bail!(SchemaMismatch:
-                        "Schema mismatch: template expects {} columns, data has {}",
-                        schema.len(),
-                        data_schema.len()
-                    );
+                // Allow empty schemas to bind to any data (generic templates)
+                if schema.len() > 0 {
+                    if schema.len() != data_schema.len() {
+                        polars_bail!(SchemaMismatch:
+                            "Schema mismatch: template expects {} columns, data has {}",
+                            schema.len(),
+                            data_schema.len()
+                        );
+                    }
+                    // Validate column names and types
+                    for (col_name, dtype) in schema.iter() {
+                        match data_schema.get(col_name) {
+                            Some(data_dtype) if data_dtype == dtype => {},
+                            Some(data_dtype) => polars_bail!(SchemaMismatch:
+                                "Column '{}' type mismatch: template expects {:?}, data has {:?}",
+                                col_name, dtype, data_dtype
+                            ),
+                            None => polars_bail!(SchemaMismatch:
+                                "Column '{}' not found in data schema",
+                                col_name
+                            ),
+                        }
+                    }
                 }
 
                 return Ok(new_arena.add(data_ir.clone()));
