@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BUILD_STREAMING_EXECUTOR"],"mod":["pivot"],"struct":["InProcessQuery","JoinBuilder","LazyCsvReader","LazyFrame","LazyGroupBy","LazyJsonLineReader","OptFlags","ScanArgsAnonymous","ScanArgsParquet"],"trait":["IntoLazy","LazyFileListReader"],"type":["AllowedOptimizations"]};
