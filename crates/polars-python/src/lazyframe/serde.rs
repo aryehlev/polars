@@ -3,6 +3,7 @@ use std::io::{BufReader, BufWriter, Read};
 use pyo3::prelude::*;
 
 use super::PyLazyFrame;
+use crate::dataframe::PyDataFrame;
 use crate::exceptions::ComputeError;
 use crate::file::get_file_like;
 use crate::prelude::*;
@@ -68,5 +69,55 @@ impl PyLazyFrame {
                 .map_err(|err| ComputeError::new_err(err.to_string()))
         })?;
         Ok(LazyFrame::from(lp).into())
+    }
+
+    fn serialize_template(&self, py: Python<'_>) -> PyResult<Vec<u8>> {
+        use polars_utils::pl_serialize;
+
+        py.enter_polars(|| -> PolarsResult<Vec<u8>> {
+            let template = self.ldf.read().clone().to_template()?;
+            let mut buffer = Vec::new();
+            pl_serialize::serialize_dsl(&mut buffer, &template)?;
+            Ok(buffer)
+        })
+    }
+
+    #[staticmethod]
+    fn deserialize_template_and_bind(
+        py: Python<'_>,
+        data: Vec<u8>,
+        df: &PyDataFrame,
+    ) -> PyResult<Self> {
+        use polars_plan::plans::IRPlan;
+        use polars_utils::pl_serialize;
+
+        py.enter_polars(|| -> PolarsResult<Self> {
+            let template: IRPlan = pl_serialize::deserialize_dsl(&data[..])?;
+
+            let bound = template.bind_to_df(std::sync::Arc::new(df.df.read().clone()))?;
+            Ok(LazyFrame::from(bound).into())
+        })
+    }
+
+    #[staticmethod]
+    fn deserialize_template_and_bind_multi(
+        py: Python<'_>,
+        data: Vec<u8>,
+        dfs: Vec<PyDataFrame>,
+    ) -> PyResult<Self> {
+        use polars_plan::plans::IRPlan;
+        use polars_utils::pl_serialize;
+
+        py.enter_polars(|| -> PolarsResult<Self> {
+            let template: IRPlan = pl_serialize::deserialize_dsl(&data[..])?;
+
+            let dataframes: Vec<std::sync::Arc<DataFrame>> = dfs
+                .iter()
+                .map(|df| std::sync::Arc::new(df.df.read().clone()))
+                .collect();
+
+            let bound = template.bind_to_dfs(dataframes)?;
+            Ok(LazyFrame::from(bound).into())
+        })
     }
 }
